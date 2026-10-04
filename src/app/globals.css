@@ -82,3 +82,16 @@ body {
     @apply text-danger hover:bg-danger/10;
   }
 }
+
+@keyframes xp-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xp-toast {
+    animation: xp-toast-in 200ms ease-out;
+  }
+}

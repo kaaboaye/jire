@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
+import { XpToastProvider } from "@/components/XpToast";
 import { listProjects } from "@/lib/queries";
 import "./globals.css";
 
@@ -21,8 +22,10 @@ export default function RootLayout({
   return (
     <html lang="pl" className="h-full antialiased">
       <body className="flex h-full flex-col md:flex-row">
-        <Sidebar projects={projects} />
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
+        <XpToastProvider>
+          <Sidebar projects={projects} />
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
+        </XpToastProvider>
       </body>
     </html>
   );

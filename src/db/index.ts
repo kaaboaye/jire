@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema";
 
 type Db = BetterSQLite3Database<typeof schema>;
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 // Survives dev-server hot reloads, so we keep a single connection per process.
 const globalForDb = globalThis as unknown as { __jireDb?: Db };

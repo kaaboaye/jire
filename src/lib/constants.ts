@@ -18,7 +18,40 @@ export const PRIORITY_LABELS: Record<IssuePriority, string> = {
   high: "High",
 };
 
+// The last default column is the done one: finishing an issue there earns XP.
 export const DEFAULT_COLUMNS = ["To Do", "In Progress", "Done"];
+
+const TYPE_XP: Record<IssueType, number> = { task: 20, bug: 30, story: 40 };
+const PRIORITY_XP_MULTIPLIER: Record<IssuePriority, number> = {
+  low: 1,
+  medium: 1.5,
+  high: 2,
+};
+
+/** XP the assignee earns for finishing an issue. */
+export function issueXp(type: IssueType, priority: IssuePriority) {
+  return Math.round(TYPE_XP[type] * PRIORITY_XP_MULTIPLIER[priority]);
+}
+
+const XP_PER_LEVEL = 100;
+
+/** Level N takes N × 100 XP to complete, so levels start at 0, 100, 300, 600… */
+export function levelProgress(xp: number) {
+  let level = 1;
+  let current = Math.max(0, xp);
+  while (current >= level * XP_PER_LEVEL) {
+    current -= level * XP_PER_LEVEL;
+    level += 1;
+  }
+  return { level, current, needed: level * XP_PER_LEVEL };
+}
+
+export type XpGain = {
+  memberName: string;
+  amount: number;
+  level: number;
+  leveledUp: boolean;
+};
 
 export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
 
