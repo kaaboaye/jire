@@ -36,6 +36,12 @@ import {
 } from "@/lib/actions";
 import { issueKey, issueXp } from "@/lib/constants";
 import type { BoardColumn, BoardIssue } from "@/lib/queries";
+import {
+  BoardFilterBar,
+  NO_FILTERS,
+  hasFilters,
+  matchesFilters,
+} from "./BoardFilters";
 import { PriorityIcon, TypeIcon } from "./IssueBadges";
 import { MemberAvatar } from "./MemberAvatar";
 import { useXpToast } from "./XpToast";
@@ -98,10 +104,12 @@ export function Board({
   projectId,
   projectKey,
   columns: serverColumns,
+  members,
 }: {
   projectId: number;
   projectKey: string;
   columns: BoardColumn[];
+  members: { id: number; name: string }[];
 }) {
   const dndId = useId();
   const columnHelpId = useId();
@@ -116,6 +124,16 @@ export function Board({
     setSyncedColumns(serverColumns);
     setColumns(serverColumns);
   }
+
+  // Filters only hide cards: `columns` stays complete, so dragging keeps
+  // working with positions in the whole column.
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const visibleIssues = (column: BoardColumn) =>
+    hasFilters(filters)
+      ? column.issues.filter((issue) => matchesFilters(issue, filters, projectKey))
+      : column.issues;
+  const count = (issuesOf: (column: BoardColumn) => BoardIssue[]) =>
+    columns.reduce((sum, column) => sum + issuesOf(column).length, 0);
 
   const [activeIssue, setActiveIssue] = useState<BoardIssue | null>(null);
   const [activeColumn, setActiveColumn] = useState<BoardColumn | null>(null);
@@ -272,6 +290,13 @@ export function Board({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
+      <BoardFilterBar
+        filters={filters}
+        onChange={setFilters}
+        members={members}
+        shown={count(visibleIssues)}
+        total={count((column) => column.issues)}
+      />
       <div className="flex min-h-0 flex-1 items-start gap-3 overflow-x-auto p-4 md:p-6">
         <SortableContext
           items={columns.map((column) => columnSortId(column.id))}
@@ -281,6 +306,7 @@ export function Board({
             <BoardColumnView
               key={column.id}
               column={column}
+              issues={visibleIssues(column)}
               projectKey={projectKey}
               fallbackName={columns.find((c) => c.id !== column.id)?.name}
               helpId={columnHelpId}
@@ -298,7 +324,11 @@ export function Board({
           <IssueCardBody issue={activeIssue} projectKey={projectKey} dragging />
         )}
         {activeColumn && (
-          <ColumnOverlay column={activeColumn} projectKey={projectKey} />
+          <ColumnOverlay
+            column={activeColumn}
+            issues={visibleIssues(activeColumn)}
+            projectKey={projectKey}
+          />
         )}
       </DragOverlay>
     </DndContext>
@@ -309,7 +339,8 @@ const COLUMN_CLASS = "flex max-h-full w-72 shrink-0 flex-col rounded-xl bg-surfa
 const COLUMN_HEADING_CLASS =
   "flex items-center gap-2 px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted uppercase select-none";
 
-function ColumnTitle({ column }: { column: BoardColumn }) {
+function ColumnTitle({ column, shown }: { column: BoardColumn; shown: number }) {
+  const total = column.issues.length;
   return (
     <>
       <span className="truncate">{column.name}</span>
@@ -332,7 +363,7 @@ function ColumnTitle({ column }: { column: BoardColumn }) {
         </svg>
       )}
       <span className="rounded-full bg-bg px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
-        {column.issues.length}
+        {shown === total ? total : `${shown}/${total}`}
       </span>
     </>
   );
@@ -340,11 +371,14 @@ function ColumnTitle({ column }: { column: BoardColumn }) {
 
 function BoardColumnView({
   column,
+  issues,
   projectKey,
   fallbackName,
   helpId,
 }: {
   column: BoardColumn;
+  /** The column's issues that pass the board filters. */
+  issues: BoardIssue[];
   projectKey: string;
   /** Column that takes over the issues on delete; missing for the last one. */
   fallbackName?: string;
@@ -397,7 +431,7 @@ function BoardColumnView({
             className={`${COLUMN_HEADING_CLASS} cursor-grab rounded-tl-xl outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset`}
             {...listeners}
           >
-            <ColumnTitle column={column} />
+            <ColumnTitle column={column} shown={issues.length} />
           </span>
         </h2>
         <button
@@ -418,7 +452,7 @@ function BoardColumnView({
       )}
 
       <SortableContext
-        items={column.issues.map((issue) => issueDragId(issue.id))}
+        items={issues.map((issue) => issueDragId(issue.id))}
         strategy={verticalListSortingStrategy}
       >
         <ul
@@ -427,7 +461,7 @@ function BoardColumnView({
             isOver ? "bg-accent-soft/60" : ""
           }`}
         >
-          {column.issues.map((issue) => (
+          {issues.map((issue) => (
             <SortableIssueCard key={issue.id} issue={issue} projectKey={projectKey} />
           ))}
         </ul>
@@ -441,18 +475,20 @@ function BoardColumnView({
 // Static copy of a column that follows the pointer while it is dragged.
 function ColumnOverlay({
   column,
+  issues,
   projectKey,
 }: {
   column: BoardColumn;
+  issues: BoardIssue[];
   projectKey: string;
 }) {
   return (
     <section aria-hidden className={`${COLUMN_CLASS} cursor-grabbing shadow-lg`}>
       <h2 className={COLUMN_HEADING_CLASS}>
-        <ColumnTitle column={column} />
+        <ColumnTitle column={column} shown={issues.length} />
       </h2>
       <ul className="flex min-h-16 flex-1 flex-col gap-2 overflow-hidden px-2 py-1">
-        {column.issues.map((issue) => (
+        {issues.map((issue) => (
           <li key={issue.id}>
             <IssueCardBody issue={issue} projectKey={projectKey} />
           </li>

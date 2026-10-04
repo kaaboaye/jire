@@ -9,24 +9,29 @@ function initials(name: string) {
   return letters.join("").toLocaleUpperCase("pl");
 }
 
+const SIZES = {
+  sm: "size-5 text-[9px]",
+  md: "size-7 text-[11px]",
+  lg: "size-10 text-sm",
+};
+
 /** Round, to tell people apart from the square project avatars. */
 export function MemberAvatar({
   name,
-  size = "md",
+  size = "lg",
   labelled = false,
 }: {
   name: string;
-  size?: "sm" | "md";
+  size?: keyof typeof SIZES;
   /** Announce the person's name; leave off when the name is shown next to it. */
   labelled?: boolean;
 }) {
-  const dimensions = size === "sm" ? "size-5 text-[9px]" : "size-10 text-sm";
   return (
     <span
       {...(labelled
         ? { role: "img", "aria-label": `Osoba: ${name}`, title: name }
         : { "aria-hidden": true })}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${dimensions}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${SIZES[size]}`}
       style={{ background: `hsl(${hueFromKey(name)} 45% 40%)` }}
     >
       {initials(name)}
