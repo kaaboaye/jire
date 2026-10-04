@@ -22,8 +22,9 @@ first start in `data/jire.db` (the file is not tracked by git).
   Columns are reordered by dragging their header, added with the button at the end of
   the board, and deleted with the × in their header.
 - **Search and filters** above the board: a text search over issue keys and titles
-  (ignoring case and Polish diacritics) plus assignee, type and priority filters. They
-  only hide cards in the browser, so dragging still works and a reload resets them.
+  (ignoring case and Polish diacritics) plus toggles for assignees, types and
+  priorities; several can be on at once. They only hide cards in the browser, so
+  dragging still works and a reload resets them.
 - **Issue** with a title, description, type (Task / Bug / Story), priority, assignee and
   status (its column); it opens on top of the board at its own URL, e.g.
   `/projects/SKL/issues/SKL-1`.
