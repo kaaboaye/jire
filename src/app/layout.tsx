@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/Sidebar";
+import { XpToastProvider } from "@/components/XpToast";
 import { listProjects } from "@/lib/queries";
 import {
   THEME_MODE_COOKIE,
@@ -37,8 +38,10 @@ export default async function RootLayout({
       data-palette={theme.palette}
     >
       <body className="flex h-full flex-col md:flex-row">
-        <Sidebar projects={projects} theme={theme} />
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
+        <XpToastProvider>
+          <Sidebar projects={projects} theme={theme} />
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
+        </XpToastProvider>
       </body>
     </html>
   );

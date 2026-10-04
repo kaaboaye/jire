@@ -14,6 +14,7 @@ export function Sidebar({
   theme: Theme;
 }) {
   const pathname = usePathname();
+  const onTeam = pathname === "/team";
 
   return (
     <aside className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2 md:w-60 md:flex-col md:items-stretch md:gap-0 md:border-r md:border-b-0 md:px-3 md:py-4">
@@ -30,6 +31,28 @@ export function Sidebar({
           <span className="h-1/3 w-1 rounded-sm bg-accent-fg/60" />
         </span>
         Jire
+      </Link>
+
+      <Link
+        href="/team"
+        aria-current={onTeam ? "page" : undefined}
+        className={`ml-auto flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm transition-colors md:mt-4 md:ml-0 md:gap-2.5 md:px-2 ${
+          onTeam
+            ? "bg-accent-soft font-medium text-fg"
+            : "text-muted hover:bg-surface-2 hover:text-fg"
+        }`}
+      >
+        <svg viewBox="0 0 16 16" className="size-4 md:mx-1" aria-hidden>
+          <path
+            d="M6 7.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.5 13.5c0-2.2 2-3.5 4.5-3.5s4.5 1.3 4.5 3.5M10.5 7.4a2.3 2.3 0 000-4.6M12.2 10.3c1.4.5 2.3 1.6 2.3 3.2"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        Zespół
       </Link>
 
       <nav className="hidden min-h-0 flex-1 flex-col md:mt-6 md:flex">
@@ -65,7 +88,7 @@ export function Sidebar({
 
       <Link
         href="/projects/new"
-        className="btn btn-outline ml-auto md:mt-3 md:ml-0"
+        className="btn btn-outline md:mt-3"
       >
         <span aria-hidden>+</span> Nowy projekt
       </Link>

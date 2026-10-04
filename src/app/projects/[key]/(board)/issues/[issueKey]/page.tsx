@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { IssuePanel } from "@/components/IssuePanel";
 import { issueKey as formatIssueKey } from "@/lib/constants";
-import { getColumns, getIssue, getProjectByKey } from "@/lib/queries";
+import { getColumns, getIssue, getProjectByKey, listMembers } from "@/lib/queries";
 
 type Props = { params: Promise<{ key: string; issueKey: string }> };
 
@@ -47,8 +47,10 @@ export default async function IssuePage(props: Props) {
         type: issue.type,
         priority: issue.priority,
         columnId: issue.columnId,
+        assigneeId: issue.assigneeId,
       }}
       columns={getColumns(project.id).map((c) => ({ id: c.id, name: c.name }))}
+      members={listMembers().map((m) => ({ id: m.id, name: m.name }))}
       createdAt={dateFormat.format(issue.createdAt)}
       updatedAt={dateFormat.format(issue.updatedAt)}
     />

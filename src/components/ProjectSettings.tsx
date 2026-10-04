@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import {
   addColumn,
   deleteColumn,
   deleteProject,
   moveColumn,
   renameColumn,
+  setColumnDone,
   updateProject,
 } from "@/lib/actions";
 
@@ -80,11 +81,16 @@ export function ProjectDetailsForm({
   );
 }
 
-type SettingsColumn = { id: number; name: string; issueCount: number };
+type SettingsColumn = {
+  id: number;
+  name: string;
+  isDone: boolean;
+  issueCount: number;
+};
 
 export function ColumnsEditor({
   projectId,
-  columns,
+  columns: savedColumns,
 }: {
   projectId: number;
   columns: SettingsColumn[];
@@ -92,6 +98,21 @@ export function ColumnsEditor({
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Ticks the checkbox right away instead of waiting for the server.
+  const [columns, showDone] = useOptimistic(
+    savedColumns,
+    (current, change: { id: number; isDone: boolean }) =>
+      current.map((c) => (c.id === change.id ? { ...c, isDone: change.isDone } : c)),
+  );
+
+  function toggleDone(column: SettingsColumn, isDone: boolean) {
+    setError(null);
+    startTransition(async () => {
+      showDone({ id: column.id, isDone });
+      const result = await setColumnDone(column.id, isDone);
+      if (result.error) setError(result.error);
+    });
+  }
 
   function run(action: () => Promise<{ error?: string } | void>) {
     setError(null);
@@ -130,11 +151,11 @@ export function ColumnsEditor({
     <div className="mt-4">
       <ul className="space-y-2">
         {columns.map((column, index) => (
-          <li key={column.id} className="flex items-center gap-1.5">
+          <li key={column.id} className="flex flex-wrap items-center gap-1.5">
             <input
               // Remounts with the saved name after a rename or a failed one.
               key={column.name}
-              className="field"
+              className="field sm:w-auto sm:min-w-0 sm:flex-1"
               defaultValue={column.name}
               aria-label={`Nazwa kolumny ${index + 1}`}
               maxLength={80}
@@ -143,7 +164,18 @@ export function ColumnsEditor({
                 if (e.key === "Enter") e.currentTarget.blur();
               }}
             />
-            <span className="w-20 shrink-0 text-right text-xs text-muted tabular-nums">
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 px-1 text-xs text-muted">
+              <input
+                type="checkbox"
+                className="size-4 accent-accent"
+                checked={column.isDone}
+                disabled={pending}
+                aria-label={`Kolumna ${column.name} jest ukończona`}
+                onChange={(e) => toggleDone(column, e.target.checked)}
+              />
+              Ukończona
+            </label>
+            <span className="mr-auto w-20 shrink-0 text-right text-xs text-muted tabular-nums sm:mr-0">
               zadań: {column.issueCount}
             </span>
             <button

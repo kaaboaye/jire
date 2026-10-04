@@ -1,6 +1,6 @@
-import { and, asc, count, eq, getTableColumns } from "drizzle-orm";
+import { and, asc, count, eq, getTableColumns, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { columns, issues, projects } from "@/db/schema";
+import { columns, issues, members, projects, xpAwards } from "@/db/schema";
 
 export function listProjects() {
   return getDb()
@@ -38,8 +38,10 @@ export function getBoard(projectId: number) {
       title: issues.title,
       type: issues.type,
       priority: issues.priority,
+      assigneeName: members.name,
     })
     .from(issues)
+    .leftJoin(members, eq(members.id, issues.assigneeId))
     .where(eq(issues.projectId, projectId))
     .orderBy(asc(issues.position))
     .all();
@@ -47,6 +49,7 @@ export function getBoard(projectId: number) {
   return getColumns(projectId).map((column) => ({
     id: column.id,
     name: column.name,
+    isDone: column.isDone,
     issues: projectIssues.filter((issue) => issue.columnId === column.id),
   }));
 }
@@ -59,6 +62,23 @@ export function getIssue(projectId: number, number: number) {
     .get();
 }
 
+/** Team members with their XP totals, in alphabetical order. */
+export function listMembers() {
+  return getDb()
+    .select({
+      id: members.id,
+      name: members.name,
+      xp: sql<number>`coalesce(sum(${xpAwards.amount}), 0)`.mapWith(Number),
+      completed: count(xpAwards.id),
+    })
+    .from(members)
+    .leftJoin(xpAwards, eq(xpAwards.memberId, members.id))
+    .groupBy(members.id)
+    .all()
+    .sort((a, b) => a.name.localeCompare(b.name, "pl"));
+}
+
+export type TeamMember = ReturnType<typeof listMembers>[number];
 export type ProjectSummary = ReturnType<typeof listProjects>[number];
 export type BoardColumn = ReturnType<typeof getBoard>[number];
 export type BoardIssue = BoardColumn["issues"][number];

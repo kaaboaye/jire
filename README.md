@@ -1,6 +1,7 @@
 # Jire
 
-A local Jira clone: projects with Kanban boards, no users and no login.
+A local Jira clone: projects with Kanban boards and a team that earns XP for finished
+issues. There are no accounts and no login.
 
 ## Running
 
@@ -12,7 +13,7 @@ npm run dev
 The app runs at http://localhost:3000. The SQLite database is created automatically on
 first start in `data/jire.db` (the file is not tracked by git).
 
-`npm run db:seed` adds a demo project if the database is empty.
+`npm run db:seed` adds a demo project and two team members if the database is empty.
 
 ## What's inside
 
@@ -20,10 +21,17 @@ first start in `data/jire.db` (the file is not tracked by git).
 - **Board** with columns; cards can be dragged between columns and within a column.
   Columns are reordered by dragging their header, added with the button at the end of
   the board, and deleted with the × in their header.
-- **Issue** with a title, description, type (Task / Bug / Story), priority and status
-  (its column); it opens on top of the board at its own URL, e.g.
+- **Issue** with a title, description, type (Task / Bug / Story), priority, assignee and
+  status (its column); it opens on top of the board at its own URL, e.g.
   `/projects/SKL/issues/SKL-1`.
-- **Project settings**: name and description, column editing, deleting the project.
+- **Project settings**: name and description, column editing (including which columns
+  count as done), deleting the project.
+- **Team** (`/team`): people who can be assigned to issues. They are plain names, not
+  accounts.
+- **XP and levels**: when an issue reaches a done column its assignee earns XP based on
+  the issue's type and priority; XP adds up to levels. Moving the issue back takes the
+  XP away, while deleting a finished issue or its project keeps it. The rules live in
+  `src/lib/constants.ts` (`issueXp`, `levelProgress`) and the ledger in `src/lib/xp.ts`.
 - **Themes**: the "Motyw" button in the sidebar switches the mode (system / light /
   dark) and one of five colour palettes. The choice is stored in cookies, so it is
   per browser.

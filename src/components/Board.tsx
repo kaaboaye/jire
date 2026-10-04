@@ -34,9 +34,11 @@ import {
   moveColumnTo,
   moveIssue,
 } from "@/lib/actions";
-import { issueKey } from "@/lib/constants";
+import { issueKey, issueXp } from "@/lib/constants";
 import type { BoardColumn, BoardIssue } from "@/lib/queries";
 import { PriorityIcon, TypeIcon } from "./IssueBadges";
+import { MemberAvatar } from "./MemberAvatar";
+import { useXpToast } from "./XpToast";
 
 const issueDragId = (id: number) => `issue-${id}`;
 const columnDropId = (id: number) => `column-${id}`;
@@ -104,6 +106,7 @@ export function Board({
   const dndId = useId();
   const columnHelpId = useId();
   const [, startTransition] = useTransition();
+  const showXp = useXpToast();
 
   // Local copy so cards move instantly while dragging; whenever the server
   // sends a fresh board it replaces the local one.
@@ -246,7 +249,10 @@ export function Board({
     const before = locate(serverColumns, issue.id);
     if (before?.columnId === column.id && before.index === index) return;
 
-    startTransition(() => moveIssue(issue.id, column.id, index));
+    startTransition(async () => {
+      const { xp } = await moveIssue(issue.id, column.id, index);
+      if (xp) showXp(xp);
+    });
   }
 
   function handleDragCancel() {
@@ -307,6 +313,24 @@ function ColumnTitle({ column }: { column: BoardColumn }) {
   return (
     <>
       <span className="truncate">{column.name}</span>
+      {column.isDone && (
+        <svg
+          viewBox="0 0 16 16"
+          className="size-3.5 shrink-0 text-accent"
+          role="img"
+          aria-label="Ukończone zadania dają XP"
+        >
+          <title>Ukończone zadania dają XP</title>
+          <path
+            d="M3.5 8.5l3 3 6-7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
       <span className="rounded-full bg-bg px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
         {column.issues.length}
       </span>
@@ -495,9 +519,13 @@ function IssueCardBody({
         <span className="font-medium tabular-nums">
           {issueKey(projectKey, issue.number)}
         </span>
-        <span className="ml-auto">
-          <PriorityIcon priority={issue.priority} />
+        <span className="ml-auto tabular-nums">
+          {issueXp(issue.type, issue.priority)} XP
         </span>
+        <PriorityIcon priority={issue.priority} />
+        {issue.assigneeName && (
+          <MemberAvatar name={issue.assigneeName} size="sm" labelled />
+        )}
       </div>
     </div>
   );

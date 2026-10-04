@@ -4,8 +4,8 @@ import { asc, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getDb } from "@/db";
-import { columns, issues, projects } from "@/db/schema";
+import { getDb, type Tx } from "@/db";
+import { columns, issues, members, projects } from "@/db/schema";
 import {
   DEFAULT_COLUMNS,
   ISSUE_PRIORITIES,
@@ -13,6 +13,7 @@ import {
   PROJECT_KEY_PATTERN,
   type IssuePriority,
   type IssueType,
+  type XpGain,
 } from "@/lib/constants";
 import {
   THEME_MODE_COOKIE,
@@ -20,12 +21,12 @@ import {
   isThemeMode,
   isThemePalette,
 } from "@/lib/theme";
+import { syncIssueXp } from "@/lib/xp";
 
-export type ActionResult = { error?: string };
-
-type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+export type ActionResult = { error?: string; xp?: XpGain };
 
 const MAX_NAME = 80;
+const MAX_MEMBER_NAME = 60;
 const MAX_TITLE = 200;
 
 // Everything lives under one layout that lists projects, so refreshing from
@@ -113,7 +114,12 @@ export async function createProject(input: {
       .get();
     DEFAULT_COLUMNS.forEach((columnName, position) => {
       tx.insert(columns)
-        .values({ projectId: project.id, name: columnName, position })
+        .values({
+          projectId: project.id,
+          name: columnName,
+          position,
+          isDone: position === DEFAULT_COLUMNS.length - 1,
+        })
         .run();
     });
   });
@@ -180,6 +186,28 @@ export async function renameColumn(
   return {};
 }
 
+/** Marks a column as done (or not); its issues gain or lose their XP. */
+export async function setColumnDone(
+  columnId: number,
+  isDone: boolean,
+): Promise<ActionResult> {
+  if (!isId(columnId) || typeof isDone !== "boolean") {
+    return { error: "Nieprawidłowa kolumna." };
+  }
+
+  const error = getDb().transaction((tx) => {
+    const column = tx.select().from(columns).where(eq(columns.id, columnId)).get();
+    if (!column) return "Kolumna już nie istnieje.";
+    tx.update(columns).set({ isDone }).where(eq(columns.id, columnId)).run();
+    orderedIssueIds(tx, columnId).forEach((id) => syncIssueXp(tx, id));
+    return null;
+  });
+
+  if (error) return { error };
+  refresh();
+  return {};
+}
+
 export async function moveColumn(
   columnId: number,
   direction: -1 | 1,
@@ -234,10 +262,9 @@ export async function deleteColumn(columnId: number): Promise<ActionResult> {
     }
 
     const target = remaining[0];
-    writeIssueOrder(tx, target.id, [
-      ...orderedIssueIds(tx, target.id),
-      ...orderedIssueIds(tx, columnId),
-    ]);
+    const moved = orderedIssueIds(tx, columnId);
+    writeIssueOrder(tx, target.id, [...orderedIssueIds(tx, target.id), ...moved]);
+    moved.forEach((id) => syncIssueXp(tx, id));
     tx.delete(columns).where(eq(columns.id, columnId)).run();
     writeColumnOrder(
       tx,
@@ -300,9 +327,14 @@ export async function updateIssue(
     type: IssueType;
     priority: IssuePriority;
     columnId: number;
+    assigneeId: number | null;
   },
 ): Promise<ActionResult> {
-  if (!isId(issueId) || !isId(input.columnId)) {
+  if (
+    !isId(issueId) ||
+    !isId(input.columnId) ||
+    (input.assigneeId !== null && !isId(input.assigneeId))
+  ) {
     return { error: "Nieprawidłowe zadanie." };
   }
   const title = cleanName(input.title, MAX_TITLE);
@@ -314,9 +346,16 @@ export async function updateIssue(
   const description =
     typeof input.description === "string" ? input.description.slice(0, 20000) : "";
 
-  const error = getDb().transaction((tx) => {
+  const result = getDb().transaction((tx): ActionResult => {
     const issue = tx.select().from(issues).where(eq(issues.id, issueId)).get();
-    if (!issue) return "Zadanie już nie istnieje.";
+    if (!issue) return { error: "Zadanie już nie istnieje." };
+
+    if (
+      input.assigneeId !== null &&
+      !tx.select().from(members).where(eq(members.id, input.assigneeId)).get()
+    ) {
+      return { error: "Ta osoba została usunięta z zespołu." };
+    }
 
     if (input.columnId !== issue.columnId) {
       const target = tx
@@ -325,7 +364,7 @@ export async function updateIssue(
         .where(eq(columns.id, input.columnId))
         .get();
       if (!target || target.projectId !== issue.projectId) {
-        return "Kolumna już nie istnieje.";
+        return { error: "Kolumna już nie istnieje." };
       }
       writeIssueOrder(tx, target.id, [...orderedIssueIds(tx, target.id), issueId]);
       writeIssueOrder(tx, issue.columnId, orderedIssueIds(tx, issue.columnId));
@@ -337,16 +376,16 @@ export async function updateIssue(
         description,
         type: input.type,
         priority: input.priority,
+        assigneeId: input.assigneeId,
         updatedAt: new Date(),
       })
       .where(eq(issues.id, issueId))
       .run();
-    return null;
+    return { xp: syncIssueXp(tx, issueId) ?? undefined };
   });
 
-  if (error) return { error };
-  refresh();
-  return {};
+  if (!result.error) refresh();
+  return result;
 }
 
 export async function deleteIssue(issueId: number): Promise<void> {
@@ -375,14 +414,14 @@ export async function moveIssue(
   issueId: number,
   toColumnId: number,
   toIndex: number,
-): Promise<void> {
-  if (!isId(issueId) || !isId(toColumnId) || !Number.isInteger(toIndex)) return;
+): Promise<ActionResult> {
+  if (!isId(issueId) || !isId(toColumnId) || !Number.isInteger(toIndex)) return {};
 
-  getDb().transaction((tx) => {
+  const xp = getDb().transaction((tx) => {
     const issue = tx.select().from(issues).where(eq(issues.id, issueId)).get();
-    if (!issue) return;
+    if (!issue) return null;
     const target = tx.select().from(columns).where(eq(columns.id, toColumnId)).get();
-    if (!target || target.projectId !== issue.projectId) return;
+    if (!target || target.projectId !== issue.projectId) return null;
 
     const targetIds = orderedIssueIds(tx, toColumnId).filter((id) => id !== issueId);
     const index = Math.max(0, Math.min(toIndex, targetIds.length));
@@ -392,8 +431,65 @@ export async function moveIssue(
     if (issue.columnId !== toColumnId) {
       writeIssueOrder(tx, issue.columnId, orderedIssueIds(tx, issue.columnId));
     }
+    return syncIssueXp(tx, issueId);
   });
 
+  refresh();
+  return { xp: xp ?? undefined };
+}
+
+// -------------------------------------------------------------------- team
+
+// Compared in JS: SQLite's lower() only folds ASCII, so it would miss "Łukasz".
+function memberNameTaken(tx: Tx, name: string, exceptId?: number) {
+  const wanted = name.toLocaleLowerCase("pl");
+  return tx
+    .select()
+    .from(members)
+    .all()
+    .some((m) => m.id !== exceptId && m.name.toLocaleLowerCase("pl") === wanted);
+}
+
+export async function createMember(rawName: string): Promise<ActionResult> {
+  const name = cleanName(rawName, MAX_MEMBER_NAME);
+  if (!name) return { error: "Podaj imię lub nazwę osoby." };
+
+  const error = getDb().transaction((tx) => {
+    if (memberNameTaken(tx, name)) return `Osoba „${name}” już jest w zespole.`;
+    tx.insert(members).values({ name }).run();
+    return null;
+  });
+
+  if (error) return { error };
+  refresh();
+  return {};
+}
+
+export async function renameMember(
+  memberId: number,
+  rawName: string,
+): Promise<ActionResult> {
+  if (!isId(memberId)) return { error: "Nieprawidłowa osoba." };
+  const name = cleanName(rawName, MAX_MEMBER_NAME);
+  if (!name) return { error: "Nazwa osoby nie może być pusta." };
+
+  const error = getDb().transaction((tx) => {
+    if (memberNameTaken(tx, name, memberId)) {
+      return `Osoba „${name}” już jest w zespole.`;
+    }
+    tx.update(members).set({ name }).where(eq(members.id, memberId)).run();
+    return null;
+  });
+
+  if (error) return { error };
+  refresh();
+  return {};
+}
+
+/** Deletes a person with their XP; their issues become unassigned. */
+export async function deleteMember(memberId: number): Promise<void> {
+  if (!isId(memberId)) return;
+  getDb().delete(members).where(eq(members.id, memberId)).run();
   refresh();
 }
 

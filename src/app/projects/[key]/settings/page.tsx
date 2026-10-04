@@ -18,6 +18,7 @@ export default async function SettingsPage({
   const columns = getBoard(project.id).map((column) => ({
     id: column.id,
     name: column.name,
+    isDone: column.isDone,
     issueCount: column.issues.length,
   }));
 
@@ -37,7 +38,8 @@ export default async function SettingsPage({
         <section className="rounded-xl border border-line bg-surface p-5">
           <h2 className="font-semibold">Kolumny</h2>
           <p className="mt-1 text-sm text-muted">
-            Kolejność na liście to kolejność kolumn na tablicy, od lewej.
+            Kolejność na liście to kolejność kolumn na tablicy, od lewej. Zadanie
+            w kolumnie oznaczonej jako ukończona daje XP przypisanej osobie.
           </p>
           <ColumnsEditor projectId={project.id} columns={columns} />
         </section>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { deleteIssue, updateIssue } from "@/lib/actions";
@@ -9,10 +10,12 @@ import {
   PRIORITY_LABELS,
   TYPE_LABELS,
   issueKey,
+  issueXp,
   type IssuePriority,
   type IssueType,
 } from "@/lib/constants";
 import { TypeIcon } from "./IssueBadges";
+import { useXpToast } from "./XpToast";
 
 type PanelIssue = {
   id: number;
@@ -22,27 +25,32 @@ type PanelIssue = {
   type: IssueType;
   priority: IssuePriority;
   columnId: number;
+  assigneeId: number | null;
 };
 
 export function IssuePanel({
   projectKey,
   issue,
   columns,
+  members,
   createdAt,
   updatedAt,
 }: {
   projectKey: string;
   issue: PanelIssue;
   columns: { id: number; name: string }[];
+  members: { id: number; name: string }[];
   createdAt: string;
   updatedAt: string;
 }) {
   const router = useRouter();
+  const showXp = useXpToast();
   const [title, setTitle] = useState(issue.title);
   const [description, setDescription] = useState(issue.description);
   const [type, setType] = useState(issue.type);
   const [priority, setPriority] = useState(issue.priority);
   const [columnId, setColumnId] = useState(issue.columnId);
+  const [assigneeId, setAssigneeId] = useState(issue.assigneeId);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -51,7 +59,8 @@ export function IssuePanel({
     description !== issue.description ||
     type !== issue.type ||
     priority !== issue.priority ||
-    columnId !== issue.columnId;
+    columnId !== issue.columnId ||
+    assigneeId !== issue.assigneeId;
 
   const close = useCallback(() => {
     if (dirty && !window.confirm("Masz niezapisane zmiany. Zamknąć bez zapisywania?")) {
@@ -78,9 +87,14 @@ export function IssuePanel({
         type,
         priority,
         columnId,
+        assigneeId,
       });
-      if (result.error) setError(result.error);
-      else setTitle((current) => current.trim());
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setTitle((current) => current.trim());
+      if (result.xp) showXp(result.xp);
     });
   }
 
@@ -176,6 +190,36 @@ export function IssuePanel({
               </select>
             </div>
             <div>
+              <label htmlFor="issue-assignee" className="label">
+                Osoba
+              </label>
+              <select
+                id="issue-assignee"
+                className="field"
+                value={assigneeId ?? ""}
+                onChange={(e) =>
+                  setAssigneeId(e.target.value ? Number(e.target.value) : null)
+                }
+                aria-describedby={members.length === 0 ? "issue-assignee-hint" : undefined}
+              >
+                <option value="">Nieprzypisane</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+              {members.length === 0 && (
+                <p id="issue-assignee-hint" className="mt-1.5 text-xs text-muted">
+                  Najpierw{" "}
+                  <Link href="/team" className="text-accent-strong underline">
+                    dodaj osoby do zespołu
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+            <div>
               <label htmlFor="issue-type" className="label">
                 Typ
               </label>
@@ -210,6 +254,12 @@ export function IssuePanel({
               </select>
             </div>
             <dl className="space-y-1 border-t border-line pt-4 text-xs text-muted">
+              <div className="flex justify-between gap-2">
+                <dt>Nagroda za ukończenie</dt>
+                <dd className="text-right font-medium text-fg tabular-nums">
+                  {issueXp(type, priority)} XP
+                </dd>
+              </div>
               <div className="flex justify-between gap-2">
                 <dt>Utworzono</dt>
                 <dd className="text-right tabular-nums">{createdAt}</dd>
