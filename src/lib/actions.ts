@@ -2,6 +2,7 @@
 
 import { asc, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb, type Tx } from "@/db";
 import { columns, issues, members, projects } from "@/db/schema";
@@ -14,6 +15,12 @@ import {
   type IssueType,
   type XpGain,
 } from "@/lib/constants";
+import {
+  THEME_MODE_COOKIE,
+  THEME_PALETTE_COOKIE,
+  isThemeMode,
+  isThemePalette,
+} from "@/lib/theme";
 import { syncIssueXp } from "@/lib/xp";
 
 export type ActionResult = { error?: string; xp?: XpGain };
@@ -466,4 +473,21 @@ export async function deleteMember(memberId: number): Promise<void> {
   if (!isId(memberId)) return;
   getDb().delete(members).where(eq(members.id, memberId)).run();
   refresh();
+}
+
+const THEME_COOKIE_OPTIONS = {
+  path: "/",
+  maxAge: 60 * 60 * 24 * 365,
+  sameSite: "lax",
+  httpOnly: true,
+} as const;
+
+// The theme is a per-browser preference, so it lives in cookies rather than
+// the database. Setting them makes Next.js re-render the root layout, which
+// puts the new values on <html>.
+export async function saveTheme(input: { mode: unknown; palette: unknown }) {
+  if (!isThemeMode(input?.mode) || !isThemePalette(input?.palette)) return;
+  const cookieStore = await cookies();
+  cookieStore.set(THEME_MODE_COOKIE, input.mode, THEME_COOKIE_OPTIONS);
+  cookieStore.set(THEME_PALETTE_COOKIE, input.palette, THEME_COOKIE_OPTIONS);
 }

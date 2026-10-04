@@ -1,35 +1,92 @@
 @import "tailwindcss";
 
+/*
+ * Theme = mode x palette, both set as attributes on <html> (see layout.tsx).
+ * The mode only switches `color-scheme`; every token is a light-dark() pair,
+ * so "system" follows the OS without a media query per palette.
+ */
 :root {
-  --bg: #f5f4ef;
-  --surface: #ffffff;
-  --surface-2: #ebe9e2;
-  --line: #dddad0;
-  --fg: #1c1b18;
-  --muted: #68655d;
-  --accent: #0f766e;
-  --accent-strong: #0b5c56;
-  --accent-fg: #ffffff;
-  --accent-soft: #d8efeb;
-  --danger: #b42318;
+  --danger: light-dark(#b42318, #f2766b);
+  color-scheme: light dark;
+}
+
+:root[data-mode="light"] {
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #131311;
-    --surface: #1c1c19;
-    --surface-2: #272723;
-    --line: #34342f;
-    --fg: #eceae4;
-    --muted: #9c998f;
-    --accent: #2cc4b2;
-    --accent-strong: #52d6c6;
-    --accent-fg: #06211e;
-    --accent-soft: #143531;
-    --danger: #f2766b;
-    color-scheme: dark;
-  }
+:root[data-mode="dark"] {
+  color-scheme: dark;
+}
+
+/*
+ * Palettes are matched on any element, not just <html>, so the theme picker
+ * can preview a palette by putting data-palette on a swatch. The default
+ * block must stay first: the others override it on <html> by source order.
+ */
+:root,
+[data-palette="teal"] {
+  --bg: light-dark(#f5f4ef, #131311);
+  --surface: light-dark(#ffffff, #1c1c19);
+  --surface-2: light-dark(#ebe9e2, #272723);
+  --line: light-dark(#dddad0, #34342f);
+  --fg: light-dark(#1c1b18, #eceae4);
+  --muted: light-dark(#68655d, #9c998f);
+  --accent: light-dark(#0f766e, #2cc4b2);
+  --accent-strong: light-dark(#0b5c56, #52d6c6);
+  --accent-fg: light-dark(#ffffff, #06211e);
+  --accent-soft: light-dark(#d8efeb, #143531);
+}
+
+[data-palette="ocean"] {
+  --bg: light-dark(#f1f4f9, #0f1217);
+  --surface: light-dark(#ffffff, #171b22);
+  --surface-2: light-dark(#e4e9f1, #212731);
+  --line: light-dark(#d3dae5, #2e3541);
+  --fg: light-dark(#161b24, #e6e9ef);
+  --muted: light-dark(#5b6575, #949cab);
+  --accent: light-dark(#1d5fd1, #6aa5ff);
+  --accent-strong: light-dark(#174ba8, #93bdff);
+  --accent-fg: light-dark(#ffffff, #06142b);
+  --accent-soft: light-dark(#dbe7fb, #16294a);
+}
+
+[data-palette="forest"] {
+  --bg: light-dark(#f2f5ef, #111410);
+  --surface: light-dark(#ffffff, #191d17);
+  --surface-2: light-dark(#e5eae0, #232820);
+  --line: light-dark(#d4dbcd, #30362c);
+  --fg: light-dark(#181c16, #e7ebe3);
+  --muted: light-dark(#5d6657, #979f90);
+  --accent: light-dark(#2f7a34, #6fcf73);
+  --accent-strong: light-dark(#245f29, #93dd95);
+  --accent-fg: light-dark(#ffffff, #08210a);
+  --accent-soft: light-dark(#dcefd9, #1a3519);
+}
+
+[data-palette="amber"] {
+  --bg: light-dark(#f8f3ea, #15120d);
+  --surface: light-dark(#fffdf9, #1e1a14);
+  --surface-2: light-dark(#efe6d6, #2a251c);
+  --line: light-dark(#e1d5c0, #393225);
+  --fg: light-dark(#1f1a12, #efe9df);
+  --muted: light-dark(#6e6453, #a39a89);
+  --accent: light-dark(#a8530a, #f0a63c);
+  --accent-strong: light-dark(#854006, #f6bf6c);
+  --accent-fg: light-dark(#ffffff, #261500);
+  --accent-soft: light-dark(#f8e3c4, #3a2a10);
+}
+
+[data-palette="plum"] {
+  --bg: light-dark(#f5f2f7, #131116);
+  --surface: light-dark(#ffffff, #1b1920);
+  --surface-2: light-dark(#eae5ee, #26232c);
+  --line: light-dark(#dbd4e1, #34303b);
+  --fg: light-dark(#1b1820, #eae7ee);
+  --muted: light-dark(#655e6e, #9b95a4);
+  --accent: light-dark(#7c3aad, #c08cf0);
+  --accent-strong: light-dark(#632c8c, #d4b0f5);
+  --accent-fg: light-dark(#ffffff, #1f0b33);
+  --accent-soft: light-dark(#ecdcf7, #2e1d42);
 }
 
 @theme inline {

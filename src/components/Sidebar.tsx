@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { Theme } from "@/lib/theme";
 import { ProjectAvatar } from "./ProjectAvatar";
+import { ThemePicker } from "./ThemePicker";
 
 export function Sidebar({
   projects,
+  theme,
 }: {
   projects: { key: string; name: string }[];
+  theme: Theme;
 }) {
   const pathname = usePathname();
   const onTeam = pathname === "/team";
@@ -88,6 +92,8 @@ export function Sidebar({
       >
         <span aria-hidden>+</span> Nowy projekt
       </Link>
+
+      <ThemePicker theme={theme} />
     </aside>
   );
 }
