@@ -4,6 +4,10 @@ Jire is a local Jira clone (Next.js + TypeScript + SQLite). The project overview
 structure are in [README.md](README.md). Docs for the installed Next.js version live in
 `node_modules/next/dist/docs` — read those instead of relying on memory.
 
+Jire is a demo project. Build the simplest thing that does what was asked: no extra
+tables, abstractions or screens "for later". If a sturdier design looks worth its cost,
+say so and ask before building it.
+
 ## Language
 
 Everything written to the repository is in English: docs, code comments, commit
@@ -14,6 +18,14 @@ Polish; keep UI strings in Polish.
 
 Every code change goes through the steps below, in this order. A task is not finished
 until all of them are done.
+
+There are two levels of rigour:
+
+- **Standard** is the default.
+- **Full** applies only when the user asks for it (for example "full verification").
+
+Each step says what the full level adds. A change that cannot affect the running app
+(docs, agent configuration) needs only step 1 and a PR without screenshots.
 
 ### 1. Static checks
 
@@ -27,27 +39,44 @@ All three must pass without errors.
 
 ### 2. Verify in the browser
 
-Once the code is written, start the app (`npm run dev`, http://localhost:3000) and
-click through it in a real browser. Code that compiles proves nothing.
+Once the code is written, start the app and click through it in a real browser. Code
+that compiles proves nothing.
 
-- Walk the whole flow the change touches, start to finish, plus the neighbouring flows
-  it could have broken (board, dragging cards, issue panel, project settings, creating
-  and deleting a project).
+Tools:
+
+- Start the dev server from `.claude/launch.json` (`jire`). It may not get port 3000:
+  when another session already holds it, the server starts on a free port. Use the
+  port it reports.
+- Drive the browser with Playwright, from the first step. The desktop app's built-in
+  browser pane cannot drag cards on the board and cannot save full-size screenshots,
+  so starting there means doing the work twice.
+- Keep Playwright scripts short: one flow per script, returning what it observed. A
+  long script that fails halfway loses everything it collected.
+
+Standard level:
+
+- Walk the whole flow the change touches, start to finish.
 - Confirm changes are actually persisted: reload the page and check the state survived.
-- Check edge cases: empty lists, long text, validation errors, URLs that do not exist.
+- Check the empty states and validation errors of what you changed.
 - The browser console and the server logs must be free of errors and warnings.
+- Check the changed views at three viewport sizes: desktop (1440×900), tablet
+  (768×1024) and mobile (375×812). None of them may scroll the whole page horizontally.
+
+The full level adds:
+
+- The neighbouring flows the change could have broken (board, dragging cards, issue
+  panel, project settings, creating and deleting a project).
+- More edge cases: long text, URLs that do not exist.
 - UI/UX: nothing is misaligned, overlapping or clipped; hover, focus, disabled and
   loading states look right; both light and dark themes.
 - Accessibility (a11y): everything is operable by keyboard, focus is visible, fields
   have labels, icon-only buttons have an accessible name, contrast is sufficient, error
   messages are announced (`role="alert"`).
-- Check three viewport sizes: desktop (1440×900), tablet (768×1024) and mobile
-  (375×812). None of them may scroll the whole page horizontally.
 
 Fix whatever you find and verify again. Clean up any test data you created while
 clicking around.
 
-### 3. Independent code review
+### 3. Independent code review (full level only)
 
 Only after the browser confirms everything works, get a code review from someone who
 does not share your reasoning: a separate agent with a fresh context. Give it the diff
@@ -59,7 +88,8 @@ the PR. After the fixes, go back to steps 1 and 2 for everything they touched.
 ### 4. Pull request with screenshots
 
 Changes reach `main` through a PR from a separate branch. The PR must include
-screenshots of the changed views at three viewport sizes: desktop, tablet and mobile.
+screenshots at three viewport sizes: desktop, tablet and mobile. Capture only the views
+the change touched, not every view in the app.
 
 1. Take the screenshots from the final code (after the review fixes), not an earlier
    state.
@@ -77,5 +107,6 @@ screenshots of the changed views at three viewport sizes: desktop, tablet and mo
 
 5. After opening the PR, open it on GitHub and make sure the images render.
 
-The PR description also covers: what changed and why, what was verified in the browser,
-and the outcome of the code review (what was found and what was fixed).
+The PR description also covers: what changed and why, which level was used, what was
+verified in the browser, and — at the full level — the outcome of the code review (what
+was found and what was fixed).
