@@ -1,31 +1,38 @@
 # Jire
 
-Lokalny klon Jiry: projekty z tablicami Kanban, bez użytkowników i logowania.
+A local Jira clone: projects with Kanban boards, no users and no login.
 
-## Uruchomienie
+## Running
 
 ```bash
 npm install
 npm run dev
 ```
 
-Aplikacja działa pod http://localhost:3000. Baza SQLite powstaje sama przy
-pierwszym uruchomieniu w `data/jire.db` (plik jest poza gitem).
+The app runs at http://localhost:3000. The SQLite database is created automatically on
+first start in `data/jire.db` (the file is not tracked by git).
 
-`npm run db:seed` dodaje projekt demo, jeśli baza jest pusta.
+`npm run db:seed` adds a demo project if the database is empty.
 
-## Co jest w środku
+## What's inside
 
-- **Projekty** z własnym kluczem (np. `SKL`) i numeracją zadań (`SKL-1`, `SKL-2`…).
-- **Tablica** z kolumnami; karty przeciąga się między kolumnami i w obrębie kolumny.
-- **Zadanie** ma tytuł, opis, typ (Task / Bug / Story), priorytet i status (kolumnę);
-  otwiera się nad tablicą pod własnym adresem, np. `/projects/SKL/issues/SKL-1`.
-- **Ustawienia projektu**: nazwa i opis, edycja kolumn, usunięcie projektu.
+- **Projects** with their own key (e.g. `SKL`) and issue numbering (`SKL-1`, `SKL-2`…).
+- **Board** with columns; cards can be dragged between columns and within a column.
+- **Issue** with a title, description, type (Task / Bug / Story), priority and status
+  (its column); it opens on top of the board at its own URL, e.g.
+  `/projects/SKL/issues/SKL-1`.
+- **Project settings**: name and description, column editing, deleting the project.
 
-## Struktura
+The user interface is in Polish.
 
-- `src/db` – schemat (Drizzle), połączenie z SQLite, dane przykładowe.
-- `src/lib/queries.ts` – odczyty, `src/lib/actions.ts` – zapisy (Server Actions).
-- `src/app` – strony, `src/components` – komponenty interfejsu.
-- `drizzle/` – migracje; po zmianie schematu: `npm run db:generate`
-  (migracje wykonują się same przy starcie aplikacji).
+## Structure
+
+- `src/db` – schema (Drizzle), SQLite connection, seed data.
+- `src/lib/queries.ts` – reads, `src/lib/actions.ts` – writes (Server Actions).
+- `src/app` – pages, `src/components` – UI components.
+- `drizzle/` – migrations; after changing the schema run `npm run db:generate`
+  (migrations are applied automatically when the app starts).
+
+## Contributing
+
+The required workflow for every change is described in [AGENTS.md](AGENTS.md).
