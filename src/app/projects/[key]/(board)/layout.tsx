@@ -17,7 +17,11 @@ export default async function BoardLayout({
 
   return (
     <>
-      <Board projectKey={project.key} columns={getBoard(project.id)} />
+      <Board
+        projectId={project.id}
+        projectKey={project.key}
+        columns={getBoard(project.id)}
+      />
       {children}
     </>
   );
