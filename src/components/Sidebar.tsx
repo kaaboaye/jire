@@ -36,7 +36,7 @@ export function Sidebar({
       <Link
         href="/team"
         aria-current={onTeam ? "page" : undefined}
-        className={`ml-auto flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors md:mt-4 md:ml-0 ${
+        className={`ml-auto flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm transition-colors md:mt-4 md:ml-0 md:gap-2.5 md:px-2 ${
           onTeam
             ? "bg-accent-soft font-medium text-fg"
             : "text-muted hover:bg-surface-2 hover:text-fg"
