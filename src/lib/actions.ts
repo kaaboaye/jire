@@ -228,6 +228,24 @@ export async function moveColumn(
   refresh();
 }
 
+/** Drops a column at `toIndex` of its project's board. */
+export async function moveColumnTo(columnId: number, toIndex: number): Promise<void> {
+  if (!isId(columnId) || !Number.isInteger(toIndex)) return;
+
+  getDb().transaction((tx) => {
+    const column = tx.select().from(columns).where(eq(columns.id, columnId)).get();
+    if (!column) return;
+    const ids = orderedColumns(tx, column.projectId)
+      .map((c) => c.id)
+      .filter((id) => id !== columnId);
+    const index = Math.max(0, Math.min(toIndex, ids.length));
+    ids.splice(index, 0, columnId);
+    writeColumnOrder(tx, ids);
+  });
+
+  refresh();
+}
+
 /** Deletes a column; its issues move to the end of the first remaining one. */
 export async function deleteColumn(columnId: number): Promise<ActionResult> {
   if (!isId(columnId)) return { error: "Nieprawidłowa kolumna." };

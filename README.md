@@ -19,6 +19,8 @@ first start in `data/jire.db` (the file is not tracked by git).
 
 - **Projects** with their own key (e.g. `SKL`) and issue numbering (`SKL-1`, `SKL-2`…).
 - **Board** with columns; cards can be dragged between columns and within a column.
+  Columns are reordered by dragging their header, added with the button at the end of
+  the board, and deleted with the × in their header.
 - **Issue** with a title, description, type (Task / Bug / Story), priority, assignee and
   status (its column); it opens on top of the board at its own URL, e.g.
   `/projects/SKL/issues/SKL-1`.

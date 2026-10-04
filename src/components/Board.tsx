@@ -3,26 +3,37 @@
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   closestCorners,
   useDroppable,
   useSensor,
   useSensors,
+  type Announcements,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
+  type KeyboardCoordinateGetter,
   type UniqueIdentifier,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
+  horizontalListSortingStrategy,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition } from "react";
-import { createIssue, moveIssue } from "@/lib/actions";
+import {
+  addColumn,
+  createIssue,
+  deleteColumn,
+  moveColumnTo,
+  moveIssue,
+} from "@/lib/actions";
 import { issueKey, issueXp } from "@/lib/constants";
 import type { BoardColumn, BoardIssue } from "@/lib/queries";
 import { PriorityIcon, TypeIcon } from "./IssueBadges";
@@ -31,6 +42,49 @@ import { useXpToast } from "./XpToast";
 
 const issueDragId = (id: number) => `issue-${id}`;
 const columnDropId = (id: number) => `column-${id}`;
+const columnSortId = (id: number) => `sort-column-${id}`;
+const isColumnSortId = (id: UniqueIdentifier) =>
+  String(id).startsWith("sort-column-");
+
+// A dragged column only targets other columns, picked by horizontal distance
+// alone because columns differ in height. Cards never see the column
+// sortables, so they keep targeting cards and column drop areas.
+const collisionDetection: CollisionDetection = (args) => {
+  const draggingColumn = isColumnSortId(args.active.id);
+  const droppableContainers = args.droppableContainers.filter(
+    (container) => isColumnSortId(container.id) === draggingColumn,
+  );
+  if (!draggingColumn) return closestCorners({ ...args, droppableContainers });
+
+  const center = args.collisionRect.left + args.collisionRect.width / 2;
+  return droppableContainers
+    .flatMap((droppableContainer) => {
+      const rect = args.droppableRects.get(droppableContainer.id);
+      if (!rect) return [];
+      const value = Math.abs(rect.left + rect.width / 2 - center);
+      return [{ id: droppableContainer.id, data: { droppableContainer, value } }];
+    })
+    .sort((a, b) => a.data.value - b.data.value);
+};
+
+// Arrow keys carry a picked-up column exactly one column over.
+const columnKeyboardCoordinates: KeyboardCoordinateGetter = (
+  event,
+  { currentCoordinates, context: { collisionRect, droppableContainers, droppableRects } },
+) => {
+  const direction =
+    event.code === "ArrowRight" ? 1 : event.code === "ArrowLeft" ? -1 : 0;
+  if (!direction || !collisionRect) return undefined;
+  event.preventDefault();
+
+  const [next] = droppableContainers
+    .getEnabled()
+    .filter((container) => isColumnSortId(container.id))
+    .flatMap((container) => droppableRects.get(container.id)?.left ?? [])
+    .filter((left) => (left - collisionRect.left) * direction > 1)
+    .sort((a, b) => (a - b) * direction);
+  return next === undefined ? undefined : { ...currentCoordinates, x: next };
+};
 
 function locate(columns: BoardColumn[], issueId: number) {
   for (const column of columns) {
@@ -41,13 +95,16 @@ function locate(columns: BoardColumn[], issueId: number) {
 }
 
 export function Board({
+  projectId,
   projectKey,
   columns: serverColumns,
 }: {
+  projectId: number;
   projectKey: string;
   columns: BoardColumn[];
 }) {
   const dndId = useId();
+  const columnHelpId = useId();
   const [, startTransition] = useTransition();
   const showXp = useXpToast();
 
@@ -61,11 +118,47 @@ export function Board({
   }
 
   const [activeIssue, setActiveIssue] = useState<BoardIssue | null>(null);
+  const [activeColumn, setActiveColumn] = useState<BoardColumn | null>(null);
 
-  // A small drag threshold keeps plain clicks working as "open issue".
+  // A small drag threshold keeps plain clicks working as "open issue". The
+  // keyboard sensor only reaches column headings: cards handle their own keys.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: columnKeyboardCoordinates,
+      scrollBehavior: "auto",
+    }),
   );
+
+  function describe(id: UniqueIdentifier) {
+    const column = columns.find(
+      (c) => columnSortId(c.id) === id || columnDropId(c.id) === id,
+    );
+    if (column) return `kolumna ${column.name}`;
+    const issue = columnOf(id)?.issues.find((i) => issueDragId(i.id) === id);
+    return issue ? `zadanie ${issueKey(projectKey, issue.number)}` : "element";
+  }
+
+  // Where the dragged thing would land: a slot for columns, a target for cards.
+  function describeTarget(id: UniqueIdentifier) {
+    const index = columns.findIndex((c) => columnSortId(c.id) === id);
+    return index >= 0
+      ? `pozycja ${index + 1} z ${columns.length}`
+      : `nad: ${describe(id)}`;
+  }
+
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Podniesiono: ${describe(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over
+        ? `Przenoszenie: ${describe(active.id)}, ${describeTarget(over.id)}.`
+        : undefined,
+    onDragEnd: ({ active, over }) =>
+      over
+        ? `Upuszczono: ${describe(active.id)}, ${describeTarget(over.id)}.`
+        : `Upuszczono: ${describe(active.id)}.`,
+    onDragCancel: ({ active }) => `Anulowano przenoszenie: ${describe(active.id)}.`,
+  };
 
   function columnOf(id: UniqueIdentifier) {
     return columns.find(
@@ -76,6 +169,12 @@ export function Board({
   }
 
   function handleDragStart({ active }: DragStartEvent) {
+    if (isColumnSortId(active.id)) {
+      setActiveColumn(
+        columns.find((column) => columnSortId(column.id) === active.id) ?? null,
+      );
+      return;
+    }
     const column = columnOf(active.id);
     setActiveIssue(
       column?.issues.find((issue) => issueDragId(issue.id) === active.id) ?? null,
@@ -115,6 +214,16 @@ export function Board({
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
+    if (activeColumn) {
+      setActiveColumn(null);
+      const from = columns.findIndex((c) => c.id === activeColumn.id);
+      const to = columns.findIndex((c) => columnSortId(c.id) === over?.id);
+      if (from < 0 || to < 0 || from === to) return;
+      setColumns((current) => arrayMove(current, from, to));
+      startTransition(() => moveColumnTo(activeColumn.id, to));
+      return;
+    }
+
     const issue = activeIssue;
     setActiveIssue(null);
     if (!issue || !over) {
@@ -148,6 +257,7 @@ export function Board({
 
   function handleDragCancel() {
     setActiveIssue(null);
+    setActiveColumn(null);
     setColumns(serverColumns);
   }
 
@@ -155,71 +265,164 @@ export function Board({
     <DndContext
       id={dndId}
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
+      accessibility={{ announcements }}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
       <div className="flex min-h-0 flex-1 items-start gap-3 overflow-x-auto p-4 md:p-6">
-        {columns.map((column) => (
-          <BoardColumnView key={column.id} column={column} projectKey={projectKey} />
-        ))}
+        <SortableContext
+          items={columns.map((column) => columnSortId(column.id))}
+          strategy={horizontalListSortingStrategy}
+        >
+          {columns.map((column) => (
+            <BoardColumnView
+              key={column.id}
+              column={column}
+              projectKey={projectKey}
+              fallbackName={columns.find((c) => c.id !== column.id)?.name}
+              helpId={columnHelpId}
+            />
+          ))}
+        </SortableContext>
+        <AddColumn projectId={projectId} />
       </div>
+      <p id={columnHelpId} hidden>
+        Aby przestawić kolumnę, naciśnij spację, strzałkami w lewo i w prawo wybierz
+        nowe miejsce i ponownie naciśnij spację. Escape anuluje.
+      </p>
       <DragOverlay>
         {activeIssue && (
           <IssueCardBody issue={activeIssue} projectKey={projectKey} dragging />
+        )}
+        {activeColumn && (
+          <ColumnOverlay column={activeColumn} projectKey={projectKey} />
         )}
       </DragOverlay>
     </DndContext>
   );
 }
 
+const COLUMN_CLASS = "flex max-h-full w-72 shrink-0 flex-col rounded-xl bg-surface-2";
+const COLUMN_HEADING_CLASS =
+  "flex items-center gap-2 px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted uppercase select-none";
+
+function ColumnTitle({ column }: { column: BoardColumn }) {
+  return (
+    <>
+      <span className="truncate">{column.name}</span>
+      {column.isDone && (
+        <svg
+          viewBox="0 0 16 16"
+          className="size-3.5 shrink-0 text-accent"
+          role="img"
+          aria-label="Ukończone zadania dają XP"
+        >
+          <title>Ukończone zadania dają XP</title>
+          <path
+            d="M3.5 8.5l3 3 6-7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+      <span className="rounded-full bg-bg px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
+        {column.issues.length}
+      </span>
+    </>
+  );
+}
+
 function BoardColumnView({
   column,
   projectKey,
+  fallbackName,
+  helpId,
 }: {
   column: BoardColumn;
   projectKey: string;
+  /** Column that takes over the issues on delete; missing for the last one. */
+  fallbackName?: string;
+  /** Element describing how to reorder columns with the keyboard. */
+  helpId: string;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(column.id) });
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: columnDropId(column.id),
+  });
+  // The whole column moves, but only its heading starts the drag.
+  const {
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: columnSortId(column.id) });
+
+  function remove() {
+    const message =
+      column.issues.length > 0 && fallbackName
+        ? `Usunąć kolumnę „${column.name}”? Jej zadania (${column.issues.length}) trafią do kolumny „${fallbackName}”.`
+        : `Usunąć kolumnę „${column.name}”?`;
+    if (!window.confirm(message)) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteColumn(column.id);
+      if (result.error) setError(result.error);
+    });
+  }
 
   return (
     <section
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       aria-label={column.name}
-      className="flex max-h-full w-72 shrink-0 flex-col rounded-xl bg-surface-2"
+      className={`${COLUMN_CLASS} ${isDragging ? "opacity-40" : ""}`}
     >
-      <h2 className="flex items-center gap-2 px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-muted uppercase">
-        <span className="truncate">{column.name}</span>
-        {column.isDone && (
-          <svg
-            viewBox="0 0 16 16"
-            className="size-3.5 shrink-0 text-accent"
-            role="img"
-            aria-label="Ukończone zadania dają XP"
+      <div className="flex items-start">
+        <h2 className="min-w-0 flex-1">
+          <span
+            ref={setActivatorNodeRef}
+            role="button"
+            tabIndex={0}
+            aria-roledescription="przestawiana kolumna"
+            aria-describedby={helpId}
+            className={`${COLUMN_HEADING_CLASS} cursor-grab rounded-tl-xl outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset`}
+            {...listeners}
           >
-            <title>Ukończone zadania dają XP</title>
-            <path
-              d="M3.5 8.5l3 3 6-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-        <span className="rounded-full bg-bg px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
-          {column.issues.length}
-        </span>
-      </h2>
+            <ColumnTitle column={column} />
+          </span>
+        </h2>
+        <button
+          type="button"
+          className="btn btn-ghost mt-1.5 mr-1.5 size-7 p-0"
+          aria-label={`Usuń kolumnę ${column.name}`}
+          title="Usuń kolumnę"
+          disabled={pending || !fallbackName}
+          onClick={remove}
+        >
+          ×
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="px-3 pb-1 text-xs text-danger">
+          {error}
+        </p>
+      )}
 
       <SortableContext
         items={column.issues.map((issue) => issueDragId(issue.id))}
         strategy={verticalListSortingStrategy}
       >
         <ul
-          ref={setNodeRef}
+          ref={setDropRef}
           className={`flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto rounded-lg px-2 py-1 transition-colors ${
             isOver ? "bg-accent-soft/60" : ""
           }`}
@@ -231,6 +434,33 @@ function BoardColumnView({
       </SortableContext>
 
       <AddIssue columnId={column.id} />
+    </section>
+  );
+}
+
+// Static copy of a column that follows the pointer while it is dragged.
+function ColumnOverlay({
+  column,
+  projectKey,
+}: {
+  column: BoardColumn;
+  projectKey: string;
+}) {
+  return (
+    <section aria-hidden className={`${COLUMN_CLASS} cursor-grabbing shadow-lg`}>
+      <h2 className={COLUMN_HEADING_CLASS}>
+        <ColumnTitle column={column} />
+      </h2>
+      <ul className="flex min-h-16 flex-1 flex-col gap-2 overflow-hidden px-2 py-1">
+        {column.issues.map((issue) => (
+          <li key={issue.id}>
+            <IssueCardBody issue={issue} projectKey={projectKey} />
+          </li>
+        ))}
+      </ul>
+      <div className="btn btn-ghost m-2 justify-start">
+        <span aria-hidden>+</span> Dodaj zadanie
+      </div>
     </section>
   );
 }
@@ -377,6 +607,81 @@ function AddIssue({ columnId }: { columnId: number }) {
           type="submit"
           className="btn btn-primary"
           disabled={pending || !title.trim()}
+        >
+          Dodaj
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={close}>
+          Anuluj
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function AddColumn({ projectId }: { projectId: number }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function close() {
+    setOpen(false);
+    setName("");
+    setError(null);
+  }
+
+  function submit() {
+    if (!name.trim() || pending) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await addColumn(projectId, name);
+      if (result.error) setError(result.error);
+      else close();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="btn btn-ghost w-72 shrink-0 justify-start rounded-xl border border-dashed border-line py-3"
+      >
+        <span aria-hidden>+</span> Dodaj kolumnę
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="w-72 shrink-0 rounded-xl bg-surface-2 p-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <input
+        className="field"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") close();
+        }}
+        placeholder="Nazwa nowej kolumny"
+        aria-label="Nazwa nowej kolumny"
+        maxLength={80}
+        autoFocus
+      />
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {error}
+        </p>
+      )}
+      <div className="mt-2 flex gap-2">
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={pending || !name.trim()}
         >
           Dodaj
         </button>
