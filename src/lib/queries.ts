@@ -38,6 +38,7 @@ export function getBoard(projectId: number) {
       title: issues.title,
       type: issues.type,
       priority: issues.priority,
+      assigneeId: issues.assigneeId,
       assigneeName: members.name,
     })
     .from(issues)
